@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <title>20231020akakaniku_yamaguchi</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            margin: 0;
+        }
+
+        #container {
+            text-align: center;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="container" style="text-align: center">
+
+        <p> </p>
+        <p> </p>
+        <p> </p>
+        <p> </p>
+
+
+        <h1 style="text-align: center">果芯部を塗りつぶして赤色の面積率を表示</h1>
+        <p>メモ　測定を始める前に、測定対象を撮影する場所で標品を撮影し、標品が示す色の割合になる˞ＲＧＢを決めるとよいかも！！</p>
+        <p>赤色の割合は、色１(px)／{色３(px)ー色２(px)}で計算</p>
+        <p>色１は、Ｒが150～255、ＧがＲより50以上小さく、ＢはＲより小さいピクセルを数えます。</p>
+        <p>背景に光が反射すると、よくない。果肉が黄色に着色すると、よくない。蛍光灯の下で白く撮影するとよい。暖色系の光源は不向き。</p>
+        <input type="file" id="fileInput" accept="image/*">
+        <div style="text-align: center">
+        <canvas id="canvas"style="margin:auto" width="400" height="400"></canvas></div>
+        <br><p>下のスライダーで果芯部を塗りつぶしてください。</p>
+        <input type="range" id="radiusInput" min="0" max="100" value="50">
+        <br>
+        <button id="countPixelsButton">ピクセルを数える</button>
+        
+        <button id="whitenPixelsButton">色を変える</button>
+        
+        <button id="restorePixelsButton">色をもとに戻す</button>
+        
+        <button id="downloadImage">画像をダウンロード</button>
+        
+        <button id="downloadCSV">CSVをダウンロード</button><br>
+        <p></p>
+        <label for = "upperRGB">色１の上限（赤色い着色部分のＲＧＢ）:</label>
+        <input type="text" id="upperRGB" style="text-align: center" value="255,205,255"><br>
+        <label for="lowerRGB">色１の下限（赤い着色部分のＲＧＢ）:</label>
+        <input type="text" id="lowerRGB" style="text-align: center" value="150,0,0">      
+        <p>赤色の数値は、ボタン「色を変える」を押して範囲を確認してください。</p><br>
+        <label for = "upperRGB2">色２の上限（黒い背景のＲＧＢ）:</label>
+        <input type="text" id="upperRGB2" style="text-align: center" value="150,150,150"><br>
+        <label for="lowerRGB2">色２の下限（黒い背景のＲＧＢ）:</label>
+        <input type="text" id="lowerRGB2" style="text-align: center" value="0,0,0">
+        <p>黒色の数値は、ボタン「色を変える」を押して範囲を確認してください。</p><br>
+        <label for = "upperRGB3">色３の上限（画像のピクセル数のときはこのまま）:</label>
+        <input type="text" id="upperRGB3" style="text-align: center" value="255,255,255"><br>
+        <label for="lowerRGB3">色３の下限（画像のピクセル数のときはこのまま）:</label>
+        <input type="text" id="lowerRGB3" style="text-align: center" value="0,0,0">
+        <p>0から255のとき、画像全体のピクセル数を示します。</p>      
+
+        <p id="pixelCount">色１のピクセル数: -</p>
+        <p id="pixelCount2">色２のピクセル数: -</p>
+        <p id="pixelCount3">色３のピクセル数: -</p>
+        <p id="pixelCount4">色１の割合（％）: -</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ファイル名</th>
+                    <th>色１(px)</th>
+                    <th>色２(px)</th>
+                    <th>色３(px)</th>
+                    <th>色１(%)</th>
+                </tr>
+            </thead>
+            <tbody id="pixelCountTable">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const radiusInput = document.getElementById('radiusInput');
+        const lowerRGBInput = document.getElementById('lowerRGB');
+        const upperRGBInput = document.getElementById('upperRGB');
+        const lowerRGBInput2 = document.getElementById('lowerRGB2');
+        const upperRGBInput2 = document.getElementById('upperRGB2');
+        const lowerRGBInput3 = document.getElementById('lowerRGB3');
+        const upperRGBInput3 = document.getElementById('upperRGB3');
+        const countPixelsButton = document.getElementById('countPixelsButton');
+        const whitenPixelsButton = document.getElementById('whitenPixelsButton');
+        const restorePixelsButton = document.getElementById('restorePixelsButton');
+        const downloadButton = document.getElementById('downloadImage');
+        const downloadCSVButton = document.getElementById('downloadCSV');
+        const pixelCountOutput = document.getElementById('pixelCount');
+        const pixelCountOutput2 = document.getElementById('pixelCount2');
+        const pixelCountOutput3 = document.getElementById('pixelCount3');
+        const pixelCountOutput4 = document.getElementById('pixelCount4');
+        const pixelCountTable = document.getElementById('pixelCountTable');
+        let image = null;
+        let radius = parseInt(radiusInput.value);
+        let originalImageData = null;
+        let csvData = "file_name,	color1(px), color2(px), color3(px), color1(%)\n";
+
+        function draw() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 画像を描画
+            if (image) {
+                const aspectRatio = image.width / image.height;
+                const canvasAspectRatio = canvas.width / canvas.height;
+                let newWidth, newHeight;
+
+                if (aspectRatio > canvasAspectRatio) {
+                    newWidth = canvas.width;
+                    newHeight = canvas.width / aspectRatio;
+                } else {
+                    newWidth = canvas.height * aspectRatio;
+                    newHeight = canvas.height;
+                }
+
+                const x = (canvas.width - newWidth) / 2;
+                const y = (canvas.height - newHeight) / 2;
+
+                ctx.drawImage(image, x, y, newWidth, newHeight);
+            }
+
+            // 円を描画
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        fileInput.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+
+                reader.onload = function (event) {
+                    image = new Image();
+                    image.src = event.target.result;
+
+                    image.onload = function () {
+                        originalImageData = null;
+                        draw();
+                    };
+                };
+
+                reader.readAsDataURL(file);
+            }
+        });
+
+        radiusInput.addEventListener('input', function () {
+            radius = parseInt(radiusInput.value);
+            draw();
+        });
+
+        countPixelsButton.addEventListener('click', function () {
+            if (image) {
+                const lowerRGB = lowerRGBInput.value.split(',').map(Number);
+                const upperRGB = upperRGBInput.value.split(',').map(Number);
+                const lowerRGB2 = lowerRGBInput2.value.split(',').map(Number);
+                const upperRGB2 = upperRGBInput2.value.split(',').map(Number);
+                const lowerRGB3 = lowerRGBInput3.value.split(',').map(Number);
+                const upperRGB3 = upperRGBInput3.value.split(',').map(Number);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                let pixelCount = 0;
+                let pixelCount2 = 0;
+                let pixelCount3 = 0;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const pixelRGB = [pixels[i], pixels[i + 1], pixels[i + 2]];
+                    if (
+                        pixelRGB[1] <=  pixelRGB[0] -50 && //ＧはＲより50以上小さい
+                        pixelRGB[2] <=  pixelRGB[0] && //ＢはＲ以下
+                        //pixelRGB[2] <=  pixelRGB[1]+50 && Ｇ基準でＢを指定する場合
+                        pixelRGB[0] >= lowerRGB[0] && pixelRGB[0] <= upperRGB[0] &&
+                        pixelRGB[1] >= lowerRGB[1] && pixelRGB[1] <= upperRGB[1] &&
+                        pixelRGB[2] >= lowerRGB[2] && pixelRGB[2] <= upperRGB[2]
+                    ) {
+                        pixelCount++;
+                    }
+
+                    if (
+                        pixelRGB[0] >= lowerRGB2[0] && pixelRGB[0] <= upperRGB2[0] &&
+                        pixelRGB[1] >= lowerRGB2[1] && pixelRGB[1] <= upperRGB2[1] &&
+                        pixelRGB[2] >= lowerRGB2[2] && pixelRGB[2] <= upperRGB2[2]
+                    ) {
+                        pixelCount2++;
+                    }
+
+                    if (
+                        pixelRGB[0] >= lowerRGB3[0] && pixelRGB[0] <= upperRGB3[0] &&
+                        pixelRGB[1] >= lowerRGB3[1] && pixelRGB[1] <= upperRGB3[1] &&
+                        pixelRGB[2] >= lowerRGB3[2] && pixelRGB[2] <= upperRGB3[2]
+                    ) {
+                        pixelCount3++;
+                    }
+
+                    /*
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const pixelRGB = [pixels[i], pixels[i + 1], pixels[i + 2]];
+                    if (
+                        pixelRGB[0] >= lowerRGB[0] && pixelRGB[0] <= upperRGB[0] &&
+                        pixelRGB[1] >= lowerRGB[1] && pixelRGB[1] <= upperRGB[1] &&
+                        pixelRGB[2] >= lowerRGB[2] && pixelRGB[2] <= upperRGB[2]
+                    ) {
+                        pixelCount++;
+                    }
+
+                    */
+                }
+
+                var keisan = pixelCount / (pixelCount3 - pixelCount2)*100;
+                var pixelCount4 = keisan.toFixed(1); 
+
+                pixelCountOutput.textContent = `色１（赤）のピクセル数: ${pixelCount}`;
+                pixelCountOutput2.textContent = `色２（黒）のピクセル数: ${pixelCount2}`;
+                pixelCountOutput3.textContent = `色３（画像）のピクセル数: ${pixelCount3}`;
+                pixelCountOutput4.textContent = `色１（赤）の割合: ${pixelCount4}%`;
+                addRowToTable(fileInput.value, pixelCount,pixelCount2,pixelCount3,pixelCount4);
+                addToCSV(fileInput.value, pixelCount, pixelCount2, pixelCount3,pixelCount4);
+                
+            }
+        });
+
+        whitenPixelsButton.addEventListener('click', function () {
+            if (image) {
+                const lowerRGB = lowerRGBInput.value.split(',').map(Number);
+                const upperRGB = upperRGBInput.value.split(',').map(Number);
+                const lowerRGB2 = lowerRGBInput2.value.split(',').map(Number);
+                const upperRGB2 = upperRGBInput2.value.split(',').map(Number);
+                originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const pixelRGB = [pixels[i], pixels[i + 1], pixels[i + 2]];
+                    if (
+                        pixelRGB[1] <=  pixelRGB[0] -50 &&
+                        pixelRGB[2] <=  pixelRGB[0] &&
+                        //pixelRGB[2] <=  pixelRGB[1]+50 &&
+                        pixelRGB[0] >= lowerRGB[0] && pixelRGB[0] <= upperRGB[0] &&
+                        pixelRGB[1] >= lowerRGB[1] && pixelRGB[1] <= upperRGB[1] &&
+                        pixelRGB[2] >= lowerRGB[2] && pixelRGB[2] <= upperRGB[2]
+                    ) {
+                        pixels[i] = 255;
+                        pixels[i + 1] = 255;
+                        pixels[i + 2] = 255;
+                    }
+
+                    if (
+                        pixelRGB[0] >= lowerRGB2[0] && pixelRGB[0] <= upperRGB2[0] &&
+                        pixelRGB[1] >= lowerRGB2[1] && pixelRGB[1] <= upperRGB2[1] &&
+                        pixelRGB[2] >= lowerRGB2[2] && pixelRGB[2] <= upperRGB2[2]
+                    ) {
+                        pixels[i] = 0;
+                        pixels[i + 1] = 255;
+                        pixels[i + 2] = 255;
+                    }
+
+                
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+            }
+        });
+
+        restorePixelsButton.addEventListener('click', function () {
+            if (originalImageData) {
+                ctx.putImageData(originalImageData, 0, 0);
+            }
+        });
+
+        downloadButton.addEventListener('click', function () {
+            const imageURI = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+            const link = document.createElement("a");
+            link.href = imageURI;
+            link.download = "canvas_image.png";
+            link.click();
+        });
+
+        downloadCSVButton.addEventListener('click', function () {
+            const blob = new Blob([csvData], { type: "text/csv" });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "pixel_count.csv";
+            link.click();
+            window.URL.revokeObjectURL(url);
+        });
+
+        function addRowToTable(fileName, pixelCount, pixelCount2, pixelCount3, pixelCount4) {
+            const row = pixelCountTable.insertRow();
+            const cell1 = row.insertCell(0);
+            const cell2 = row.insertCell(1);
+            const cell3 = row.insertCell(2);
+            const cell4 = row.insertCell(3);
+            const cell5 = row.insertCell(4);
+            cell1.textContent = fileName;
+            cell2.textContent = pixelCount;
+            cell3.textContent = pixelCount2;
+            cell4.textContent = pixelCount3;
+            cell5.textContent = pixelCount4;
+        }
+
+        function addToCSV(fileName, pixelCount, pixelCount2, pixelCount3, pixelCount4) {
+            csvData += `"${fileName}",${pixelCount},${pixelCount2},${pixelCount3},${pixelCount4}\n`;
+        }
+    </script>
+</body>
+</html>
+
